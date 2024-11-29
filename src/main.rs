@@ -1,15 +1,31 @@
 #![allow(clippy::type_complexity)]
 mod debug;
+mod collider;
 
 use std::thread::spawn;
 
+use collider::ColliderPlugin;
 use rand::prelude::*;
 
-use bevy::{prelude::*, render::render_resource::ShaderType, sprite::MaterialMesh2dBundle};
+use bevy::{
+    math::bounding::{Aabb2d, IntersectsVolume},
+    prelude::*,
+    render::render_resource::ShaderType,
+    sprite::MaterialMesh2dBundle,
+    transform,
+};
 use bevy_derive::Deref;
 use debug::DebugPlugin;
 
 pub const CLEAR: Color = Color::linear_rgb(0.10, 0.10, 0.10);
+const BALL_SIZE: f32 = 5.;
+
+fn ball_is_colliding(ball: Vec2, rect: Aabb2d) -> bool {
+    let ball_aabb = Aabb2d::new(ball, Vec2::new(BALL_SIZE, BALL_SIZE * 0.4));
+    // Get the AABB of the rectangle
+    // Check if the AABBs intersect
+    ball_aabb.intersects(&rect)
+}
 
 //////////////////////////////////////////////////////////////////
 // Arena Stuff
@@ -35,6 +51,9 @@ impl ArenaBundle {
     }
 }
 
+#[derive(Component, Reflect, Default, Debug)]
+struct InteriorWall;
+
 fn spawn_arena(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -58,42 +77,61 @@ fn spawn_arena(
                 ..Default::default()
             },
             ..Default::default()
-        }
+        },
     ));
+}
+
+fn spawn_walls(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    let arena_size = Vec2::new(1000., 1000.);
+    let arena_center = Vec2::new(0., 0.);
     let middle_wall_left = Rectangle::new((arena_size.x / 2.) - 40., 10.);
     let color = Color::BLACK;
     let mesh = meshes.add(middle_wall_left);
     let material = materials.add(color);
+    let wall_translation = Vec3::new(-(arena_size.x / 4.0 + 40.), arena_center.y, 0.0);
     commands.spawn((
         Name::new("Middle Wall Left"),
+        InteriorWall,
+        collider::Collider {
+            size: Vec2::new(40., 10.),
+        },
         MaterialMesh2dBundle {
             mesh: mesh.into(),
             material,
             transform: Transform {
-                translation: Vec3::new(-(arena_size.x / 4.0 + 40.), arena_center.y, 0.0),
+                translation: wall_translation,
                 scale: Vec3::new(1.0, 1.0, 1.0),
                 ..Default::default()
             },
             ..Default::default()
-        })
-    );
+        },
+    ));
     let middle_wall_right = Rectangle::new((arena_size.x / 2.) - 40., 10.);
     let color = Color::BLACK;
     let mesh = meshes.add(middle_wall_right);
     let material = materials.add(color);
+    let wall_translation = Vec3::new((arena_size.x / 4.0 + 40.), arena_center.y, 0.0);
     commands.spawn((
         Name::new("Middle Wall Right"),
+        InteriorWall,
+        collider::Collider {
+            size: Vec2::new(40., 10.),
+        },
         MaterialMesh2dBundle {
             mesh: mesh.into(),
             material,
             transform: Transform {
-                translation: Vec3::new((arena_size.x / 4.0 + 40.), arena_center.y, 0.0),
+                translation: wall_translation,
                 scale: Vec3::new(1.0, 1.0, 1.0),
                 ..Default::default()
             },
             ..Default::default()
-        })
-    );
+        },
+    ));
 }
 
 //////////////////////////////////////////////////////////////////
@@ -111,6 +149,7 @@ struct Ball;
 #[derive(Bundle, Default)]
 struct BallBundle {
     ball: Ball,
+    collider: collider::Collider,
     position: Position,
     velocity: Velocity,
 }
@@ -128,13 +167,15 @@ impl BallBundle {
         let random_velocity = Vec3::new(vx, vy, 0.);
         Self {
             ball: Ball,
+            collider: collider::Collider {
+                size: Vec2::new(BALL_SIZE, BALL_SIZE),
+            },
             position: Position(Vec2::new(x, y)),
             velocity: Velocity(random_velocity),
         }
     }
 }
 
-const BALL_SIZE: f32 = 5.;
 fn spawn_ball(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -205,7 +246,7 @@ fn ball_wall_collision_system(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     let (arena_size, arena_center) = arena_query.single();
-    for (position, mut velocity, mut material_handle) in ball_query.iter_mut() {
+    for (position, mut velocity, material_handle) in ball_query.iter_mut() {
         if position.x < arena_center.x - arena_size.x / 2. {
             velocity.x = velocity.x.abs();
         } else if position.x > arena_center.x + arena_size.x / 2. {
@@ -216,6 +257,7 @@ fn ball_wall_collision_system(
         } else if position.y > arena_center.y + arena_size.y / 2. {
             velocity.y = -velocity.y.abs();
         }
+
         let color = if velocity.length() > 155. {
             Color::srgb(1.0, 0.0, 0.0)
         } else {
@@ -227,15 +269,23 @@ fn ball_wall_collision_system(
         }
     }
 }
+
 fn spawn_camera(mut commands: Commands) {
     commands.spawn_empty().insert(Camera2dBundle::default());
 }
 
 fn main() {
     App::new()
-        .add_systems(Startup, (spawn_camera, spawn_arena))
+        .add_systems(Startup, (spawn_camera, spawn_arena, spawn_walls))
         .add_systems(PostStartup, (spawn_ball))
-        .add_systems(Update, (move_ball_system, ball_wall_collision_system))
+        .add_plugins(ColliderPlugin)
+        .add_systems(
+            Update,
+            (
+                move_ball_system,
+                ball_wall_collision_system
+            ),
+        )
         .add_plugins(DefaultPlugins)
         .add_plugins(DebugPlugin)
         .run();
