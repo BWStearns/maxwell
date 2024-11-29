@@ -32,7 +32,7 @@ fn detect_collisions(
                 // Collision detected!
                 // Handle the collision here
                 // For example, you can reverse the ball's velocity
-                velocity.x = -velocity.x;
+                // velocity.x = -velocity.x;
                 velocity.y = -velocity.y;
             }
         }

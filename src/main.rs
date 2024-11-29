@@ -97,7 +97,7 @@ fn spawn_walls(
         Name::new("Middle Wall Left"),
         InteriorWall,
         collider::Collider {
-            size: Vec2::new(40., 10.),
+            size: Vec2::new((arena_size.x / 2.) - 40., 10.),
         },
         MaterialMesh2dBundle {
             mesh: mesh.into(),
@@ -119,7 +119,7 @@ fn spawn_walls(
         Name::new("Middle Wall Right"),
         InteriorWall,
         collider::Collider {
-            size: Vec2::new(40., 10.),
+            size: Vec2::new((arena_size.x / 2.) - 40., 10.),
         },
         MaterialMesh2dBundle {
             mesh: mesh.into(),
@@ -162,7 +162,8 @@ impl BallBundle {
 
         // Start x and y at random between -400 and 400
         let x = (random::<f32>() * 800.0) - 400.0;
-        let y = (random::<f32>() * 800.0) - 400.0;
+        // Start y randomly at either -200 or 200
+        let y = if random::<f32>() > 0.5 { -200.0 } else { 200.0 };
 
         let random_velocity = Vec3::new(vx, vy, 0.);
         Self {
@@ -176,7 +177,7 @@ impl BallBundle {
     }
 }
 
-fn spawn_ball(
+fn spawn_balls(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
@@ -277,7 +278,7 @@ fn spawn_camera(mut commands: Commands) {
 fn main() {
     App::new()
         .add_systems(Startup, (spawn_camera, spawn_arena, spawn_walls))
-        .add_systems(PostStartup, (spawn_ball))
+        .add_systems(PostStartup, (spawn_balls))
         .add_plugins(ColliderPlugin)
         .add_systems(
             Update,
