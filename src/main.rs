@@ -4,7 +4,9 @@ mod collider;
 
 use std::thread::spawn;
 
+use collider::Collider;
 use collider::ColliderPlugin;
+use collider::detect_future_collisions;
 use rand::prelude::*;
 
 use bevy::{
@@ -88,45 +90,51 @@ fn spawn_walls(
 ) {
     let arena_size = Vec2::new(1000., 1000.);
     let arena_center = Vec2::new(0., 0.);
-    let middle_wall_left = Rectangle::new((arena_size.x / 2.) - 40., 10.);
+    let wall_length = arena_size.x * 0.4;
+    let gap_length = arena_size.x * 0.2;
+   
+    let middle_wall_left = Rectangle::new(wall_length, 10.);
     let color = Color::BLACK;
     let mesh = meshes.add(middle_wall_left);
     let material = materials.add(color);
-    let wall_translation = Vec3::new(-(arena_size.x / 4.0 + 40.), arena_center.y, 0.0);
-    commands.spawn((
-        Name::new("Middle Wall Left"),
-        InteriorWall,
-        collider::Collider {
-            size: Vec2::new((arena_size.x / 2.) - 40., 10.),
-        },
-        MaterialMesh2dBundle {
-            mesh: mesh.into(),
-            material,
-            transform: Transform {
-                translation: wall_translation,
-                scale: Vec3::new(1.0, 1.0, 1.0),
-                ..Default::default()
-            },
-            ..Default::default()
-        },
-    ));
-    let middle_wall_right = Rectangle::new((arena_size.x / 2.) - 40., 10.);
-    let color = Color::BLACK;
+    let wall_translation = Vec3::new(-(wall_length - gap_length/2.), arena_center.y, 0.0);
+    // commands.spawn((
+    //     Name::new("Middle Wall Left"),
+    //     InteriorWall,
+    //     collider::Collider {
+    //         size: Vec2::new((wall_length) - gap_length/2., 5.),
+    //     },
+    //     MaterialMesh2dBundle {
+    //         mesh: mesh.into(),
+    //         material,
+    //         transform: Transform {
+    //             translation: wall_translation,
+    //             ..Default::default()
+    //         },
+    //         ..Default::default()
+    //     },
+    // ));
+    let middle_wall_right = Rectangle::new(wall_length, 10.);
+    let color: Color = Color::BLACK;
     let mesh = meshes.add(middle_wall_right);
     let material = materials.add(color);
-    let wall_translation = Vec3::new((arena_size.x / 4.0 + 40.), arena_center.y, 0.0);
+    println!("Arena Size: {:?}", arena_size);
+    println!("Arena Center: {:?}", arena_center);
+    println!("Wall Length: {:?}", wall_length);
+    println!("Gap Length: {:?}", gap_length);
+    let wall_translation = Vec3::new(wall_length, arena_center.y, 0.0);
+    print!("Wall Translation: {:?}", wall_translation);
     commands.spawn((
         Name::new("Middle Wall Right"),
         InteriorWall,
         collider::Collider {
-            size: Vec2::new((arena_size.x / 2.) - 40., 10.),
+            size: Vec2::new(300.0, 5.),
         },
         MaterialMesh2dBundle {
             mesh: mesh.into(),
             material,
             transform: Transform {
-                translation: wall_translation,
-                scale: Vec3::new(1.0, 1.0, 1.0),
+                translation: Vec3::new(300.0, 5., 0.0),
                 ..Default::default()
             },
             ..Default::default()
@@ -169,7 +177,7 @@ impl BallBundle {
         Self {
             ball: Ball,
             collider: collider::Collider {
-                size: Vec2::new(BALL_SIZE, BALL_SIZE),
+                size: Vec2::new(BALL_SIZE / 2., BALL_SIZE / 2.),
             },
             position: Position(Vec2::new(x, y)),
             velocity: Velocity(random_velocity),
@@ -230,17 +238,22 @@ fn spawn_balls(
 }
 
 fn move_ball_system(
-    mut ball_query: Query<(&mut Position, &Velocity, &mut Transform), With<Ball>>,
+    mut balls: Query<(&Collider, &mut Position, &mut Velocity, &mut Transform), With<Ball>>,
+    walls: Query<(&Collider, &Transform), Without<Velocity>>,
     time: Res<Time>,
 ) {
-    for (mut position, velocity, mut ball_transform) in ball_query.iter_mut() {
+    detect_future_collisions(
+        &mut balls,
+        &walls,
+        &time,
+    );
+    for (_collider, mut position, velocity, mut ball_transform) in balls.iter_mut() {
         position.x += velocity.x * time.delta_seconds();
         position.y += velocity.y * time.delta_seconds();
         ball_transform.translation.x = position.x;
         ball_transform.translation.y = position.y;
     }
 }
-
 fn ball_wall_collision_system(
     mut ball_query: Query<(&Position, &mut Velocity, &mut Handle<ColorMaterial>), With<Ball>>,
     arena_query: Query<(&ArenaSize, &ArenaCenter)>,
@@ -283,8 +296,8 @@ fn main() {
         .add_systems(
             Update,
             (
+                ball_wall_collision_system,
                 move_ball_system,
-                ball_wall_collision_system
             ),
         )
         .add_plugins(DefaultPlugins)
