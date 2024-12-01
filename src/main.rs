@@ -1,12 +1,13 @@
 #![allow(clippy::type_complexity)]
-mod debug;
 mod collider;
+mod debug;
 
 use std::thread::spawn;
 
+use bevy::sprite::Mesh2d;
+use collider::detect_future_collisions;
 use collider::Collider;
 use collider::ColliderPlugin;
-use collider::detect_future_collisions;
 use rand::prelude::*;
 
 use bevy::{
@@ -56,6 +57,12 @@ impl ArenaBundle {
 #[derive(Component, Reflect, Default, Debug)]
 struct InteriorWall;
 
+
+#[derive(Component, Reflect, Default, Debug, Deref, DerefMut)]
+struct Gate {
+    open: bool
+}
+
 fn spawn_arena(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
@@ -92,49 +99,65 @@ fn spawn_walls(
     let arena_center = Vec2::new(0., 0.);
     let wall_length = arena_size.x * 0.4;
     let gap_length = arena_size.x * 0.2;
-   
-    let middle_wall_left = Rectangle::new(wall_length, 10.);
-    let color = Color::BLACK;
-    let mesh = meshes.add(middle_wall_left);
-    let material = materials.add(color);
-    let wall_translation = Vec3::new(-(wall_length - gap_length/2.), arena_center.y, 0.0);
-    // commands.spawn((
-    //     Name::new("Middle Wall Left"),
-    //     InteriorWall,
-    //     collider::Collider {
-    //         size: Vec2::new((wall_length) - gap_length/2., 5.),
-    //     },
-    //     MaterialMesh2dBundle {
-    //         mesh: mesh.into(),
-    //         material,
-    //         transform: Transform {
-    //             translation: wall_translation,
-    //             ..Default::default()
-    //         },
-    //         ..Default::default()
-    //     },
-    // ));
-    let middle_wall_right = Rectangle::new(wall_length, 10.);
+
+    let middle_wall_rect = Rectangle::new(wall_length, 10.);
     let color: Color = Color::BLACK;
-    let mesh = meshes.add(middle_wall_right);
+    let mesh = meshes.add(middle_wall_rect);
     let material = materials.add(color);
-    println!("Arena Size: {:?}", arena_size);
-    println!("Arena Center: {:?}", arena_center);
-    println!("Wall Length: {:?}", wall_length);
-    println!("Gap Length: {:?}", gap_length);
-    let wall_translation = Vec3::new(wall_length, arena_center.y, 0.0);
-    print!("Wall Translation: {:?}", wall_translation);
+    let right_wall_translation = Vec3::new((wall_length - gap_length / 2.), arena_center.y, 0.0);
+    let collider_length = wall_length / 2.0;
+    print!("Wall Translation: {:?}", right_wall_translation);
     commands.spawn((
         Name::new("Middle Wall Right"),
         InteriorWall,
         collider::Collider {
-            size: Vec2::new(300.0, 5.),
+            size: Vec2::new(collider_length, 5.),
+        },
+        MaterialMesh2dBundle {
+            mesh: mesh.clone().into(),
+            material: material.clone(),
+            transform: Transform {
+                translation: right_wall_translation,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    ));
+    commands.spawn((
+        Name::new("Middle Wall Left"),
+        InteriorWall,
+        collider::Collider {
+            size: Vec2::new(collider_length, 5.),
         },
         MaterialMesh2dBundle {
             mesh: mesh.into(),
             material,
             transform: Transform {
-                translation: Vec3::new(300.0, 5., 0.0),
+                translation: Vec3::new(-(wall_length - gap_length / 2.), arena_center.y, 0.0),
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    ));
+    // Now spawn the middle gate in between the two walls
+    let gate_rect = Rectangle::new(gap_length, 10.);
+    let color: Color = Color::WHITE;
+    let mesh = meshes.add(gate_rect);
+    let material = materials.add(color);
+    let gate_translation = Vec3::new(0., arena_center.y, 0.0);
+    commands.spawn((
+        Name::new("Middle Wall Gate"),
+        Gate {
+            open: false,
+        },
+        collider::Collider {
+            size: Vec2::new(gap_length, 5.),
+        },
+        MaterialMesh2dBundle {
+            mesh: mesh.into(),
+            material,
+            transform: Transform {
+                translation: gate_translation,
                 ..Default::default()
             },
             ..Default::default()
@@ -142,9 +165,26 @@ fn spawn_walls(
     ));
 }
 
-//////////////////////////////////////////////////////////////////
+fn gate_control_system(
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    mut gate_query: Query<(&mut Gate, &mut Handle<ColorMaterial>)>,
+    keys: Res<ButtonInput<KeyCode>>,
+) {
+    for (mut gate, color_handle) in gate_query.iter_mut() {
+        gate.open = keys.pressed(KeyCode::KeyE);
+        // If the gate is open, change the color of the gate to green
+        if let Some(material) = materials.get_mut(&*color_handle) {
+            if gate.open {
+                *material = ColorMaterial::from(Color::srgb(0., 1., 0.));
+            } else {
+                *material = ColorMaterial::from(Color::srgb(1., 0., 0.));
+            }
+        }
+
+    }
+}//////////////////////////////////////////////////////////////////
 // Ball Stuff
-//////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////
 #[derive(Component, Reflect, Default, Deref, DerefMut, Debug)]
 struct Position(Vec2);
 
@@ -207,10 +247,6 @@ fn spawn_balls(
             color_name = "blue";
             Color::srgb(0.0, 0.0, 1.0)
         };
-        println!(
-            "v: {}, x: {}, y: {}, color: {}",
-            new_ball_velocity, new_ball_bundle.velocity.x, new_ball_bundle.velocity.y, color_name
-        );
         let material = materials.add(ball_color);
         commands.spawn((
             Name::new("Ball"),
@@ -239,14 +275,10 @@ fn spawn_balls(
 
 fn move_ball_system(
     mut balls: Query<(&Collider, &mut Position, &mut Velocity, &mut Transform), With<Ball>>,
-    walls: Query<(&Collider, &Transform), Without<Velocity>>,
+    walls: Query<(&Collider, &Transform, Option<&Gate>), Without<Velocity>>,
     time: Res<Time>,
 ) {
-    detect_future_collisions(
-        &mut balls,
-        &walls,
-        &time,
-    );
+    detect_future_collisions(&mut balls, &walls, &time);
     for (_collider, mut position, velocity, mut ball_transform) in balls.iter_mut() {
         position.x += velocity.x * time.delta_seconds();
         position.y += velocity.y * time.delta_seconds();
@@ -290,17 +322,15 @@ fn spawn_camera(mut commands: Commands) {
 
 fn main() {
     App::new()
-        .add_systems(Startup, (spawn_camera, spawn_arena, spawn_walls))
-        .add_systems(PostStartup, (spawn_balls))
-        .add_plugins(ColliderPlugin)
-        .add_systems(
-            Update,
-            (
-                ball_wall_collision_system,
-                move_ball_system,
-            ),
-        )
         .add_plugins(DefaultPlugins)
+        .add_plugins(ColliderPlugin)
         .add_plugins(DebugPlugin)
+        .add_systems(Startup, (spawn_camera, spawn_arena, spawn_walls))
+        .add_systems(PostStartup, spawn_balls)
+        .add_systems(Update, (
+            ball_wall_collision_system,
+            move_ball_system,
+        ))
+        .add_systems(Update, gate_control_system)
         .run();
 }
