@@ -1,5 +1,6 @@
 #![allow(clippy::type_complexity)]
 mod collider;
+mod ui;
 mod debug;
 
 use std::thread::spawn;
@@ -19,6 +20,9 @@ use bevy::{
 };
 use bevy_derive::Deref;
 use debug::DebugPlugin;
+
+use ui::setup_ui;
+use ui::update_score_text;
 
 pub const CLEAR: Color = Color::linear_rgb(0.10, 0.10, 0.10);
 const BALL_SIZE: f32 = 5.;
@@ -325,11 +329,12 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(ColliderPlugin)
         .add_plugins(DebugPlugin)
-        .add_systems(Startup, (spawn_camera, spawn_arena, spawn_walls))
+        .add_systems(Startup, (setup_ui, spawn_camera, spawn_arena, spawn_walls))
         .add_systems(PostStartup, spawn_balls)
         .add_systems(Update, (
             ball_wall_collision_system,
             move_ball_system,
+            update_score_text,
         ))
         .add_systems(Update, gate_control_system)
         .run();
