@@ -1,6 +1,5 @@
 #![allow(clippy::type_complexity)]
 mod collider;
-mod ui;
 mod debug;
 
 use std::thread::spawn;
@@ -21,8 +20,8 @@ use bevy::{
 use bevy_derive::Deref;
 use debug::DebugPlugin;
 
-use ui::setup_ui;
-use ui::update_score_text;
+// use ui::setup_ui;
+// use ui::update_score_text;
 
 pub const CLEAR: Color = Color::linear_rgb(0.10, 0.10, 0.10);
 const BALL_SIZE: f32 = 5.;
@@ -61,10 +60,9 @@ impl ArenaBundle {
 #[derive(Component, Reflect, Default, Debug)]
 struct InteriorWall;
 
-
 #[derive(Component, Reflect, Default, Debug, Deref, DerefMut)]
 struct Gate {
-    open: bool
+    open: bool,
 }
 
 fn spawn_arena(
@@ -151,9 +149,7 @@ fn spawn_walls(
     let gate_translation = Vec3::new(0., arena_center.y, 0.0);
     commands.spawn((
         Name::new("Middle Wall Gate"),
-        Gate {
-            open: false,
-        },
+        Gate { open: false },
         collider::Collider {
             size: Vec2::new(gap_length, 5.),
         },
@@ -184,11 +180,10 @@ fn gate_control_system(
                 *material = ColorMaterial::from(Color::srgb(1., 0., 0.));
             }
         }
-
     }
-}//////////////////////////////////////////////////////////////////
-// Ball Stuff
-///////////////////////////////////////////////////////////////////
+} //////////////////////////////////////////////////////////////////
+  // Ball Stuff
+  ///////////////////////////////////////////////////////////////////
 #[derive(Component, Reflect, Default, Deref, DerefMut, Debug)]
 struct Position(Vec2);
 
@@ -329,13 +324,16 @@ fn main() {
         .add_plugins(DefaultPlugins)
         .add_plugins(ColliderPlugin)
         .add_plugins(DebugPlugin)
-        .add_systems(Startup, (setup_ui, spawn_camera, spawn_arena, spawn_walls))
+        .add_systems(Startup, (spawn_camera, spawn_arena, spawn_walls))
         .add_systems(PostStartup, spawn_balls)
-        .add_systems(Update, (
-            ball_wall_collision_system,
-            move_ball_system,
-            update_score_text,
-        ))
+        .add_systems(
+            Update,
+            (
+                ball_wall_collision_system,
+                move_ball_system,
+                // update_score_text,
+            ),
+        )
         .add_systems(Update, gate_control_system)
         .run();
 }
